@@ -1,0 +1,52 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # config.js 는 .gitignore 대상이라 저장소에 없다.
+      # 배포할 때마다 시크릿으로 새로 만들어 넣는다.
+      - name: config.js 생성
+        env:
+          MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          MAPS_MAP_ID: ${{ vars.GOOGLE_MAPS_MAP_ID }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "::error::GOOGLE_MAPS_API_KEY 시크릿이 설정되지 않았습니다. Settings → Secrets and variables → Actions 에서 등록하세요."
+            exit 1
+          fi
+          cat > config.js <<EOF
+          window.APP_CONFIG = {
+            apiKey: "${MAPS_API_KEY}",
+            mapId: "${MAPS_MAP_ID}"
+          };
+          EOF
+          echo "config.js 생성 완료 (키 길이: ${#MAPS_API_KEY}자)"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
