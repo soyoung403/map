@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>주소 엑셀 → 구글맵 지도</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app">
+  <aside id="sidebar">
+    <header class="side-head">
+      <h1>주소 엑셀 → 지도</h1>
+      <p class="sub">엑셀(.xlsx/.xls/.csv)을 올리면 주소를 좌표로 바꿔 지도에 점으로 찍습니다.</p>
+    </header>
+
+    <!-- 1. API 키 -->
+    <section class="panel" id="panel-key">
+      <div class="panel-title">
+        <span class="step">1</span> Google Maps API 키
+        <button type="button" class="link-btn" id="key-help-toggle">발급 방법</button>
+      </div>
+      <div class="panel-body">
+        <div id="key-note" class="hidden">
+          <span id="key-note-text"></span>
+          <button type="button" class="link-btn" id="key-manual-toggle">직접 입력</button>
+        </div>
+        <div id="key-manual">
+        <div class="row">
+          <input type="password" id="api-key" placeholder="AIza..." autocomplete="off" spellcheck="false" />
+          <button type="button" id="key-reveal" class="icon-btn" title="보기/숨기기">👁</button>
+        </div>
+        <div class="row">
+          <button type="button" id="key-save" class="primary">지도 불러오기</button>
+          <label class="chk"><input type="checkbox" id="key-remember" checked /> 이 브라우저에 저장</label>
+        </div>
+        <details id="key-help">
+          <summary>키가 없다면</summary>
+          <ol>
+            <li><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>에서 프로젝트 생성</li>
+            <li>API 및 서비스 → 라이브러리에서 <b>Maps JavaScript API</b>와 <b>Geocoding API</b> 두 개를 사용 설정</li>
+            <li>사용자 인증 정보 → API 키 만들기 → 키 복사</li>
+            <li>결제 계정 연결 필요(매월 무료 크레딧 제공)</li>
+          </ol>
+          <p class="hint">키 제한을 걸 경우 <b>HTTP 리퍼러</b>에 <code>http://localhost:*</code> 를 허용하고, API 제한에는 위 두 API를 모두 포함하세요.</p>
+        </details>
+        <div class="row">
+          <input type="text" id="map-id" placeholder="Map ID (선택, 기본 DEMO_MAP_ID)" spellcheck="false" />
+        </div>
+        <p class="hint">
+          매번 입력하기 번거로우면 <code>config.example.js</code>를 <code>config.js</code>로 복사해
+          키를 적어두세요. 파일이 있으면 자동으로 불러옵니다.
+        </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 파일 -->
+    <section class="panel" id="panel-file">
+      <div class="panel-title"><span class="step">2</span> 엑셀 파일 업로드</div>
+      <div class="panel-body">
+        <div id="dropzone" tabindex="0" role="button" aria-label="엑셀 파일 선택">
+          <div class="dz-icon">📄</div>
+          <div class="dz-text"><b>파일을 끌어다 놓거나 클릭</b><br /><span>.xlsx · .xls · .csv</span></div>
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv" hidden />
+        </div>
+        <div id="file-meta" class="hidden"></div>
+
+        <div id="mapping" class="hidden">
+          <div class="field">
+            <label for="sheet-select">시트</label>
+            <select id="sheet-select"></select>
+          </div>
+          <div class="field">
+            <label for="addr-select">주소 열</label>
+            <select id="addr-select"></select>
+          </div>
+          <div class="field">
+            <label for="name-select">이름 열 <span class="opt">(선택)</span></label>
+            <select id="name-select"></select>
+          </div>
+          <div class="field two">
+            <div>
+              <label for="lat-select">위도 열 <span class="opt">(선택)</span></label>
+              <select id="lat-select"></select>
+            </div>
+            <div>
+              <label for="lng-select">경도 열 <span class="opt">(선택)</span></label>
+              <select id="lng-select"></select>
+            </div>
+          </div>
+          <p class="hint">위도/경도 열을 지정하면 해당 행은 지오코딩 없이 바로 표시됩니다.</p>
+          <button type="button" id="run-btn" class="primary wide">지도에 표시하기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 결과 -->
+    <section class="panel" id="panel-result">
+      <div class="panel-title"><span class="step">3</span> 결과</div>
+      <div class="panel-body">
+        <div id="progress-wrap" class="hidden">
+          <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+          <div class="row between">
+            <span id="progress-text" class="mono"></span>
+            <button type="button" id="cancel-btn" class="ghost small">중단</button>
+          </div>
+        </div>
+
+        <div id="stats" class="stats hidden">
+          <div class="stat ok"><b id="stat-ok">0</b><span>성공</span></div>
+          <div class="stat fail"><b id="stat-fail">0</b><span>실패</span></div>
+          <div class="stat cache"><b id="stat-cache">0</b><span>캐시</span></div>
+        </div>
+
+        <div id="result-actions" class="row hidden">
+          <button type="button" id="fit-btn" class="ghost small">전체 보기</button>
+          <button type="button" id="export-btn" class="ghost small">결과 내보내기</button>
+          <button type="button" id="clear-btn" class="ghost small danger">초기화</button>
+        </div>
+
+        <ul id="result-list"></ul>
+      </div>
+    </section>
+
+    <footer class="side-foot">
+      <span id="cache-info" class="mono"></span>
+      <button type="button" id="cache-clear" class="link-btn">캐시 비우기</button>
+    </footer>
+  </aside>
+
+  <main id="map-area">
+    <div id="map"></div>
+    <div id="map-placeholder">
+      <div class="ph-inner">
+        <div class="ph-icon">🗺️</div>
+        <h2>지도가 여기에 표시됩니다</h2>
+        <p>왼쪽에 Google Maps API 키를 입력하면 지도가 로드됩니다.</p>
+      </div>
+    </div>
+    <div id="toast" class="hidden"></div>
+  </main>
+</div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
